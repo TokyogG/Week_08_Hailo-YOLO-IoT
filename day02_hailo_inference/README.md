@@ -1,16 +1,19 @@
-# Day 02 — Hailo YOLOv8 Inference (Part A: Images)
+# Day 02 — Hailo YOLOv8 Inference
+
+**Part A: Images · Part B: Live Pi Camera**
+
+---
 
 ## Objective
 
-In this part, we run **YOLOv8s object detection on static images** using a Hailo-compiled `.hef` model on Raspberry Pi 5 + Hailo-8L.
+Day 02 validates **end-to-end YOLOv8 inference on Hailo-8L**, progressing from static images to **real-time camera input** on Raspberry Pi 5.
 
-This validates:
+By the end of this day, we confirm:
 
-* End-to-end HailoRT inference
-* Correct post-processing (NMS by class)
-* Bounding box decoding and visualization
-
-Live camera inference (Part B) is covered next.
+* HailoRT runtime is functional on-device
+* YOLOv8 NMS-by-class output is decoded correctly
+* Bounding boxes are rendered on images and live video
+* Real-time FPS is achievable on Pi + Hailo
 
 ---
 
@@ -21,20 +24,36 @@ day02_hailo_inference/
 ├── src/
 │   ├── yolov8_hailo_infer.py
 │   ├── preprocess.py
-│   └── postprocess.py
+│   ├── postprocess.py
+│   ├── camera.py
+│   └── yolo_infer.py
 ├── outputs/
 │   ├── test_images/
 │   │   ├── bus.jpg
 │   │   └── zidane.jpg
-│   └── annotated/
+│   ├── annotated/
+│   └── live_demo/
+├── notes.md
 └── README.md
 ```
 
 ---
 
-## Inputs
+# Part A — Image Inference (Validation)
 
-### Test Images
+## Purpose
+
+Part A verifies that:
+
+* The compiled `.hef` runs correctly
+* Post-processing (Hailo NMS by class) is decoded properly
+* Bounding boxes and scores are sane
+
+This step is **mandatory before live camera inference**.
+
+---
+
+## Test Images
 
 Located in:
 
@@ -47,13 +66,11 @@ Example files:
 * `bus.jpg`
 * `zidane.jpg`
 
-These are standard YOLO validation images and allow deterministic testing.
-
 ---
 
-## Running Image Inference (Part A)
+## Run Command (Part A)
 
-From the `src/` directory:
+From `src/`:
 
 ```bash
 python3 yolov8_hailo_infer.py \
@@ -63,7 +80,7 @@ python3 yolov8_hailo_infer.py \
   --score-thresh 0.35
 ```
 
-Optional debug output:
+Optional debug mode:
 
 ```bash
 --debug
@@ -73,7 +90,7 @@ Optional debug output:
 
 ## Expected Output
 
-Terminal output similar to:
+Terminal:
 
 ```
 [1/2] bus.jpg: ~20 detections
@@ -81,76 +98,167 @@ Terminal output similar to:
 Done. Processed 2 images in ~0.1s
 ```
 
-Annotated images are saved to:
+Files written to:
 
 ```
 outputs/annotated/
 ```
 
-Each image will contain:
-
-* Bounding boxes
-* Class labels
-* Confidence scores
-
 ---
 
 ## Notes on Detection Counts
 
-* Detection counts in the **20–25 range** at `score_thresh=0.35` are **normal and correct** for YOLOv8s.
-* Earlier runs with thousands of detections indicated **incorrect NMS decoding**, which has now been fixed.
+* **~15–30 detections** at `score_thresh=0.35` is **correct**
+* Earlier runs with thousands of detections were caused by:
+
+  * Incorrect NMS decoding
+  * Misinterpreting raw Hailo output buffers
+
+This has now been resolved.
 
 ---
 
-## Known Issues (Important)
+## Known Issue (Part A)
 
-### Segmentation Fault After Completion
+### Segmentation Fault After Exit
 
-You may see a message like:
+You may see:
 
 ```
 Segmentation fault
 ```
 
-**After** inference completes successfully.
+**after inference completes successfully.**
 
-✅ This does **not** affect:
-
-* Detection results
-* Saved images
-* Model correctness
+✔ Results are valid
+✔ Images are saved
+✔ Can be ignored for Day 02
 
 Cause:
 
-* HailoRT Python bindings occasionally crash during teardown
-* Related to stream/device cleanup order
+* HailoRT Python teardown instability
+* Stream/device cleanup order
 
-Status:
-
-* Safe to ignore for Day 02
-* Will be stabilized later
-* Live camera inference uses a different execution pattern
+We accept this for now and move on.
 
 ---
 
-## What You Learned in Part A
+# Part B — Live Camera Inference (Pi Camera)
 
-By completing this section, you have:
+## Purpose
 
-* Loaded a Hailo `.hef` model on-device
-* Created input/output VStreams
-* Performed INT8 inference on Hailo-8L
-* Decoded **Hailo NMS-by-class output**
-* Produced annotated detection images
+Part B moves from static images to **real-time video inference** using:
 
-This confirms your **model + runtime + post-processing pipeline is correct**.
+* Raspberry Pi Camera (IMX708)
+* Picamera2
+* Hailo-8L hardware acceleration
+
+This is the **“wow” demo** for students.
 
 ---
 
-## Next Steps
+## Camera Prerequisites
 
-### Part B (Next Session)
+Verify camera is detected:
 
-* Live inference using **Pi Camera**
-* Continuous streaming inference
-* FPS measurement
+```bash
+rpicam-hello --list-cameras
+```
+
+Expected output includes:
+
+```
+imx708 [4608x2592]
+```
+
+---
+
+## Run Command (Part B)
+
+From `src/`:
+
+```bash
+python3 yolov8_hailo_infer.py \
+  --hef ../../day01_model_and_compile/outputs/yolov8s.hef \
+  --camera \
+  --picamera2 \
+  --display \
+  --score-thresh 0.25
+```
+
+Optional saving of frames:
+
+```bash
+--save-dir ../outputs/live_demo \
+--save-every-n 30
+```
+
+---
+
+## Live Output
+
+* Camera window opens
+* Bounding boxes rendered in **green**
+* Class labels + confidence scores shown
+* FPS printed in terminal (~15–20 FPS observed)
+
+📸 Example screenshots (captured during testing):
+
+* Live bounding boxes on face and object
+* Stable real-time performance on Pi 5 + Hailo
+
+---
+
+## Notes on Bounding Boxes
+
+* Boxes may appear large or duplicated at lower thresholds
+* This is expected behavior for YOLOv8 at low confidence
+* Adjust with:
+
+  * `--score-thresh`
+  * `--max-draw`
+
+---
+
+## Known Issues (Part B)
+
+### 1. Segmentation Fault on Exit
+
+Same as Part A — occurs **after** successful run.
+
+Safe to ignore.
+
+---
+
+### 2. `q` Key Not Closing Window
+
+Some Picamera2 windows do not capture keyboard focus.
+
+Workaround:
+
+```
+CTRL+C
+```
+
+---
+
+## Performance Observations
+
+* ~15–20 FPS at 1280×720
+* CPU usage remains low
+* Hailo-8L is doing the heavy lifting
+* Debug logging significantly reduces FPS
+
+---
+
+## What You Learned in Day 02
+
+By completing Day 02, you have:
+
+* Deployed a YOLOv8 model on Hailo-8L
+* Performed real INT8 inference on-device
+* Decoded Hailo NMS-by-class outputs
+* Built a reusable inference pipeline
+* Achieved real-time object detection on Raspberry Pi
+
+This is **production-grade edge AI**
