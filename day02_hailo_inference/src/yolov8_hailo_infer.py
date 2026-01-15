@@ -21,8 +21,9 @@ from hailo_platform import (
     FormatType,
 )
 
-from preprocess import letterbox_640, bgr_to_hailo_input_flat_uint8
-from postprocess import (
+from .preprocess import letterbox_640, bgr_to_hailo_input_flat_uint8
+
+from .postprocess import (
     decode_hailo_nms_by_class,
     scale_boxes_back_from_letterbox,
     Detection,

@@ -1,0 +1,4 @@
+model,input_resolution,fps,latency_ms,power_w,stability,notes
+yolov8n,640x640,,,,,
+yolov8m,640x640,,,,,
+yolov11,640x640,,,,experimental

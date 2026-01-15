@@ -26,8 +26,8 @@ from typing import List, Tuple
 
 import numpy as np
 
-from camera import Camera
-from postprocess import postprocess_yolo, Detection
+from .camera import Camera
+from .postprocess import postprocess_yolo, Detection
 
 
 @dataclass
