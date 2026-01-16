@@ -1,0 +1,13 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+
+# Logs
+*.log
+
+# Generated outputs
+day02_hailo_inference/outputs/
+
+# OS
+.DS_Store

@@ -4,12 +4,11 @@ from __future__ import annotations
 import argparse
 import socket
 import time
+import signal
 from typing import Any, Optional
 
 import cv2
 
-
-# Import Day02 runner + helpers (package-style)
 from day02_hailo_inference.src.yolov8_hailo_infer import (
     HailoYoloRunner,
     load_labels,
@@ -19,6 +18,20 @@ from day02_hailo_inference.src.yolov8_hailo_infer import (
 from .mqtt_client import MqttConfig, MqttPublisher
 from .event_gate import GateConfig, EventGate
 from .topics import build_topics
+
+
+# ---------- graceful shutdown ----------
+_STOP = False
+
+
+def _handle_sigint(signum, frame):
+    global _STOP
+    print("\n[SYS] SIGINT received — stopping loop cleanly...")
+    _STOP = True
+
+
+signal.signal(signal.SIGINT, _handle_sigint)
+# --------------------------------------
 
 
 def device_id_default() -> str:
@@ -37,6 +50,7 @@ def det_to_dict(d, labels=None) -> dict[str, Any]:
 
 def main() -> int:
     ap = argparse.ArgumentParser()
+
     ap.add_argument("--hef", required=True)
     ap.add_argument("--labels", default=None)
 
@@ -55,18 +69,17 @@ def main() -> int:
     ap.add_argument("--camera-index", type=int, default=0)
     ap.add_argument("--display", action="store_true")
 
-    ap.add_argument("--picamera2", action="store_true", help="Use Pi Camera via Picamera2 (recommended)")
-    ap.add_argument("--camera", action="store_true", help="Use OpenCV VideoCapture (USB cam / V4L2)")
-    ap.add_argument("--debug", action="store_true", help="Extra prints")
+    ap.add_argument("--picamera2", action="store_true")
+    ap.add_argument("--camera", action="store_true")
+    ap.add_argument("--debug", action="store_true")
 
     args = ap.parse_args()
 
     labels = load_labels(args.labels)
 
-    # Topics (allow overrides)
-    default_topics = build_topics(args.device_id)
-    topic_events = args.topic_events or default_topics["events"]
-    topic_telemetry = args.topic_telemetry or default_topics["telemetry"]
+    topics = build_topics(args.device_id)
+    topic_events = args.topic_events or topics["events"]
+    topic_telemetry = args.topic_telemetry or topics["telemetry"]
 
     # MQTT
     pub = MqttPublisher(
@@ -74,134 +87,94 @@ def main() -> int:
             host=args.broker,
             port=args.port,
             client_id=f"{args.device_id}-yolo",
-            verbose=False,  # set True if you want publish spam
         )
     )
     pub.connect()
+    pub.publish_json("test/ping", {"msg": "publisher_from_yolo started"})
 
-    # One-shot startup ping (proves publish path)
-    print("[MQTT] sending startup ping...")
-    ok = pub.publish_json("test/ping", {"msg": "publisher_from_yolo started"})
-    print("[MQTT] startup ping published:", ok)
+    gate = EventGate(
+        GateConfig(
+            min_interval_ms=args.min_interval_ms,
+            min_score=args.min_event_score,
+        )
+    )
 
-    # Event gating
-    gate = EventGate(GateConfig(min_interval_ms=args.min_interval_ms, min_score=args.min_event_score))
-
-    # Camera selection
-    use_picam2 = args.picamera2 or (not args.camera)  # default to Picamera2 unless explicitly --camera
+    use_picam2 = args.picamera2 or not args.camera
     cap: Optional[cv2.VideoCapture] = None
     picam2 = None
 
-    # Shared counters
     frame_id = 0
     t0 = time.time()
     last_tel = 0.0
 
     try:
-        # Init camera
+        # Camera init
         if use_picam2:
             from picamera2 import Picamera2
 
             picam2 = Picamera2()
-            config = picam2.create_video_configuration(
+            cfg = picam2.create_video_configuration(
                 main={"format": "RGB888", "size": (args.cam_width, args.cam_height)}
             )
-            picam2.configure(config)
+            picam2.configure(cfg)
             picam2.start()
             print("[CAM] Picamera2 started")
         else:
             cap = cv2.VideoCapture(args.camera_index)
-            if not cap.isOpened():
-                print("[CAM] Could not open OpenCV camera. Try --picamera2 or another --camera-index.")
-                return 2
             cap.set(cv2.CAP_PROP_FRAME_WIDTH, args.cam_width)
             cap.set(cv2.CAP_PROP_FRAME_HEIGHT, args.cam_height)
-            print(f"[CAM] OpenCV VideoCapture started index={args.camera_index}")
 
-        # Init runner
-        if args.debug:
-            print("[RUNNER] about to init HailoYoloRunner")
+        print("[RUNNER] initializing HailoYoloRunner")
 
         with HailoYoloRunner(args.hef, debug=False) as runner:
-            if args.debug:
-                print("[RUNNER] initialized, entering loop")
+            print("[RUNNER] ready")
 
-            while True:
-                # Grab frame
+            while not _STOP:
                 if use_picam2:
                     rgb = picam2.capture_array()
-                    if rgb is None:
-                        print("[CAM] capture_array returned None")
-                        continue
                     frame = cv2.cvtColor(rgb, cv2.COLOR_RGB2BGR)
                 else:
-                    ok_cam, frame = cap.read()
-                    if not ok_cam:
-                        print("[CAM] cap.read() failed")
+                    ok, frame = cap.read()
+                    if not ok:
                         break
 
                 frame_id += 1
+                dets, _ = runner.infer_bgr(frame, score_thresh=args.score_thresh)
 
-                # Inference
-                dets, _meta = runner.infer_bgr(frame, score_thresh=args.score_thresh)
-
-                # Publish events only when gate says yes
                 gate_in = [(d.class_id, d.score) for d in dets]
                 if gate.should_publish(gate_in):
-                    payload = {
-                        "device_id": args.device_id,
-                        "ts_ms": int(time.time() * 1000),
-                        "frame_id": frame_id,
-                        "num_detections": len(dets),
-                        "detections": [det_to_dict(d, labels) for d in dets],
-                    }
-                    ok_evt = pub.publish_json(topic_events, payload, qos=0, retain=False)
-                    if args.debug:
-                        print("[MQTT] event publish:", ok_evt, "dets:", len(dets))
+                    pub.publish_json(
+                        topic_events,
+                        {
+                            "device_id": args.device_id,
+                            "ts_ms": int(time.time() * 1000),
+                            "frame_id": frame_id,
+                            "num_detections": len(dets),
+                            "detections": [det_to_dict(d, labels) for d in dets],
+                        },
+                    )
 
-                # Telemetry every ~2 seconds (always, even with no dets)
                 now = time.time()
                 if now - last_tel > 2.0:
-                    dt = now - t0
-                    fps = frame_id / max(dt, 1e-6)
-                    tel = {
-                        "device_id": args.device_id,
-                        "ts_ms": int(now * 1000),
-                        "fps": float(fps),
-                        "frame_id": int(frame_id),
-                        "topic_events": topic_events,
-                        "topic_telemetry": topic_telemetry,
-                    }
-                    ok_tel = pub.publish_json(topic_telemetry, tel, qos=0, retain=False)
-                    if args.debug:
-                        print("[MQTT] telemetry publish:", ok_tel, "fps:", fps)
+                    fps = frame_id / max(now - t0, 1e-6)
+                    pub.publish_json(
+                        topic_telemetry,
+                        {
+                            "device_id": args.device_id,
+                            "ts_ms": int(now * 1000),
+                            "fps": fps,
+                            "frame_id": frame_id,
+                        },
+                    )
                     last_tel = now
 
-                # Optional display
-                if args.display:
-                    vis = draw_dets(frame, dets, labels=labels, max_draw=50)
-                    cv2.imshow("YOLOv8 + MQTT", vis)
-                    key = cv2.waitKey(1) & 0xFF
-                    if key in (ord("q"), 27):
-                        break
-
-    except KeyboardInterrupt:
-        print("\n[SYS] Ctrl+C received, shutting down...")
     finally:
-        try:
-            if cap is not None:
-                cap.release()
-        except Exception:
-            pass
-        try:
-            if picam2 is not None:
-                picam2.stop()
-        except Exception:
-            pass
-        try:
-            cv2.destroyAllWindows()
-        except Exception:
-            pass
+        print("[SYS] shutting down resources...")
+        if cap:
+            cap.release()
+        if picam2:
+            picam2.stop()
+        cv2.destroyAllWindows()
         pub.close()
 
     return 0

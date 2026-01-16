@@ -1,0 +1,5 @@
+__pycache__/
+*.pyc
+*.log
+day02_hailo_inference/outputs/
+day04_system_integration/outputs/
