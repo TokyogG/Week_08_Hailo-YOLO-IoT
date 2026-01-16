@@ -89,9 +89,41 @@ This establishes a solid foundation for **event-driven vision** in Day 03 (MQTT)
 
 ---
 
-If you want, next we can also add:
+### **Day 03 — Event-Driven YOLOv8 Inference via MQTT**
 
-* A **one-line Day 02 takeaway** (great for the very top of the README)
-* Or a **“Why this matters”** paragraph aimed at interviews / students
+* Integrated live YOLOv8 INT8 inference on Raspberry Pi 5 with Hailo
+* Implemented MQTT publisher for edge-to-system messaging
+* Separated **telemetry** (FPS, heartbeat) from **events** (detections)
+* Added event gating to reduce message volume and noise
+* Verified end-to-end flow from Pi camera → inference → desktop broker
+* Implemented clean shutdown and SIGINT handling for hardware safety
 
-You’re exactly where you should be.
+---
+
+### **Day 04 — System Integration & MQTT Subscribers**
+
+* Implemented desktop-side MQTT subscribers
+* Added telemetry logger, event logger, and console dashboard
+* Validated wildcard topic subscriptions (`edge/+/*`)
+* Demonstrated clean separation between edge and system layers
+* Established observability without modifying edge inference code
+
+---
+
+## 🧠 Why today *felt* lighter (and why that’s correct)
+
+Day03 was hard because it crossed:
+
+* hardware
+* native runtimes
+* Python packaging
+* networking
+
+Day04 is where things **snap into place**:
+
+* no hardware debugging
+* no segfaults
+* no race conditions
+* just system composition
+
+That’s exactly how a good architecture feels once it’s right.
