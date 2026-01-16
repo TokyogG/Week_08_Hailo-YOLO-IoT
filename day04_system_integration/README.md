@@ -136,6 +136,17 @@ The Day03 publisher must be running on the Pi.
 
 ---
 
+## Validation Results
+
+The following system-level behaviors were explicitly validated:
+
+- Multiple MQTT subscribers (telemetry logger, event logger, dashboard) ran concurrently without interference
+- Desktop services remained stable during Raspberry Pi publisher shutdowns
+- Upon Pi restart, telemetry and events resumed automatically without restarting subscribers
+- System health and inference activity were observable in real time via the console dashboard
+
+These validations confirm correct MQTT fan-out, loose coupling, and system resilience.
+
 ### Completion Criteria
 
 Day04 is complete when:
