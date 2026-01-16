@@ -77,7 +77,7 @@ def main() -> int:
 
     try:
         while True:
-            clear()
+            # clear()  # disabled: can interfere with Ctrl+C in some terminals
             print("=== Day04 Simple MQTT Dashboard ===")
             print(f"Broker: {args.host}:{args.port}")
             print(f"Topics: {args.topic_telemetry} | {args.topic_events}")
@@ -122,7 +122,7 @@ def main() -> int:
 
             time.sleep(max(args.refresh_ms / 1000.0, 0.1))
 
-    except KeyboardInterrupt:
+    except (KeyboardInterrupt, SystemExit):
         print("\n[SYS] exiting dashboard...")
         return 0
 
