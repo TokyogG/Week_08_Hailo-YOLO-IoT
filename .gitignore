@@ -11,3 +11,8 @@ day02_hailo_inference/outputs/
 
 # OS
 .DS_Store
+
+# Camera bring-up / scratch tests
+day02_hailo_inference/src/camera_test.py
+day02_hailo_inference/src/camera_test_picamera2.py
+
