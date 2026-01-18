@@ -16,3 +16,5 @@ day02_hailo_inference/outputs/
 day02_hailo_inference/src/camera_test.py
 day02_hailo_inference/src/camera_test_picamera2.py
 
+# Day05 raw benchmark logs
+day05_benchmarking_and_demo/raw_messages_*.jsonl

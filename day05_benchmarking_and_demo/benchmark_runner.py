@@ -71,13 +71,20 @@ def parse_json_payload(payload: bytes) -> Optional[Dict[str, Any]]:
         return None
 
 
-def extract_producer_ts_seconds(msg: Dict[str, Any]) -> Optional[float]:
-    # Accept a few common keys
+def extract_producer_ts_seconds(msg: dict) -> Optional[float]:
+    # Prefer explicit ms field if present
+    if "ts_ms" in msg:
+        try:
+            return float(msg["ts_ms"]) / 1000.0
+        except Exception:
+            pass
+
+    # Otherwise accept seconds fields
     for k in ("ts", "timestamp", "t", "time"):
         if k in msg:
             try:
                 v = float(msg[k])
-                # Heuristic: if it's in ms (very large), convert to seconds
+                # Only convert if it's clearly ms
                 if v > 1e12:
                     v = v / 1000.0
                 return v
