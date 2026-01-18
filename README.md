@@ -127,3 +127,44 @@ Day04 is where things **snap into place**:
 * just system composition
 
 That’s exactly how a good architecture feels once it’s right.
+
+---
+
+### **Day 05 — Benchmarking, Persistence, and Demo Readiness**
+
+Day 05 focused on **measuring the system as deployed**, rather than modifying inference or messaging logic. The goal was to validate performance from the **subscriber’s point of view**, using the same MQTT streams consumed by downstream systems.
+
+#### What Was Accomplished
+
+* Implemented a **subscriber-side benchmark runner** to collect reproducible metrics
+* Benchmarked **semantic event throughput** using the `edge/<device_id>/events` topic
+* Differentiated between:
+
+  * **Telemetry** (periodic heartbeat, system FPS)
+  * **Events** (gated, meaningful detections)
+* Persisted benchmark artifacts:
+
+  * `benchmarks.csv`
+  * `run_metadata.json`
+  * raw MQTT message logs (`jsonl`)
+* Verified that benchmarking does **not interfere** with edge inference or publishing
+
+#### Key Results (Events Benchmark)
+
+* **Event rate:** ~0.25 events/sec (≈ one event every 3–4 seconds)
+* **Inference FPS (edge-reported via telemetry):** ~24–25 FPS
+* **Subscriber CPU usage:** ~3%
+* **Subscriber RAM usage:** ~7 GB
+* **Latency:** Logged but not treated as a KPI due to cross-machine clock domain effects
+
+Low event throughput is **intentional and correct**, reflecting confidence and interval gating rather than model speed.
+
+#### Outcome
+
+Day 05 confirms the system is **demo-ready and benchmarked as a system**, not a model:
+
+> Camera → Hailo inference → MQTT events → subscribers → persisted metrics
+
+This completes the Week 08 objective of building a **production-style, event-driven edge vision pipeline** with defensible performance data.
+
+---
