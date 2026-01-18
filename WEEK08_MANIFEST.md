@@ -396,3 +396,7 @@ Current Day / Question:
 - day03 publisher is canonical
 - baseline HEF must not be overwritten
 - benchmarking is subscriber-side only
+
+Documentation Convention:
+- Each day uses README.md as the authoritative record
+- notes.md files are deprecated and no longer used
